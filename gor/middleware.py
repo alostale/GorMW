@@ -65,7 +65,6 @@ class TornadoGor(Gor):
     def run(self):
         with StackContext(die_on_error):
             if self.enable_prom_exporter:
-                self.on('replay', self.stats_add_replay, counters=self.prometheus_counter)
                 start_http_server(8000)
             self.io_loop = ioloop.IOLoop.current()
             self.io_loop.run_sync(self._run)
@@ -75,6 +74,23 @@ class TornadoGor(Gor):
         self.enable_prom_exporter = enable
         self.prometheus_port = port
         self.prometheus_counter = Counters()
+        if self.enable_prom_exporter:
+            self.on('request', self.on_request_stats, counter=self.prometheus_counter)
+
+    def on_request_stats(self, proxy, msg , **kwargs):
+        counter = kwargs['counter']
+        self.on('replay', self.on_replay_stats, req=msg, counter=counter)
+
+    def on_replay_stats(self, proxy, msg,  **kwargs):
+        counter = kwargs['counter']
+        replay_status = self.http_status(msg.http)
+        req_http_path = self.http_path(kwargs['req'].http)
+        req_http_base_path = req_http_path[:req_http_path.find('/', 1)]
+        labels = {'http_status': replay_status,
+                  'http_method': self.http_method(kwargs['req'].http),
+                  'http_path': req_http_base_path
+                  }
+        counter.add_response(float(msg.meta[3]) / 1000000, labels)
 
 
 class Counters:
@@ -92,3 +108,4 @@ class Counters:
         # Otherwise create the counter
         else:
             self.responses[key] = Histogram('responses_latency', 'Response Time of Replayed Responses', labels.keys())
+

@@ -40,6 +40,7 @@ class Gor(object):
 
     def __init__(self, stderr=None):
         self.stderr = stderr or sys.stderr
+        self.prometheus_enabled=False
         self.ch = {}
 
     def run(self):
@@ -65,6 +66,7 @@ class Gor(object):
         }
         chan_prefix = chan_prefix_map[msg.type]
         resp = msg
+
         for chan_id in ['message', chan_prefix, chan_prefix + '#' + msg.id]:
             if self.ch.get(chan_id):
                 for channel in self.ch[chan_id]:
@@ -218,13 +220,5 @@ class Gor(object):
         cookies.append(name + '=' + value)
         return self.set_http_header(payload, 'Cookie', '; '.join(cookies))
 
-    def stats_add_replay(self, msg, **kwargs):
-        counters = kwargs['counters']
-        replay_status = self.http_status(msg.http)
-        http_path = self.http_path(kwargs['req'].http)
-        http_base_path = http_path[:http_path.find('/', 1)]
-        labels = {'http_status': replay_status,
-                  'http_method': self.http_method(kwargs['req'].http),
-                  'http_path': http_base_path
-                  }
-        counters.add_response(float(msg.meta[3]) / 1000000, labels)
+
+

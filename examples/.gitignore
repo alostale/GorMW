@@ -1,6 +1,7 @@
 # Examples files
 goreplay
 test.out
+err.out
 *.gor
 .idea
 

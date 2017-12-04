@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 import sys
 
+import binascii
+import time
 from gor.middleware import TornadoGor
+
+
+PY3 = sys.version_info >= (3,)
+TOKEN_NAME = 'JSESSIONID'
 
 """
 Stores prometheus counters and provides an interface to push metrics with custom labels
 """
-
-TOKEN_NAME = 'JSESSIONID'
-
-
 class Tokens:
     def __init__(self):
         self.tokens = {}
@@ -19,15 +21,15 @@ class Tokens:
         Retrieves the latest observed value for the specified token, original_value pair.
         :param name: The name of the token to look for.
         :param original_value: The value of the token in the original response gathered during the recording
-        :return value: the value of the token in the last replayed sample of an epmty string
-        :return err: 0 if the new value of the token was found, 1 if the token has not been found
+        :return value: the value of the token in the last replayed sample or an epmty string
+        :return found: True if the new value of the token has been found, False otherwise
         """
         if name in self.tokens:
             if original_value in self.tokens[name]:
-                return self.tokens[name][original_value], 0
+                return self.tokens[name][original_value], True
             elif None in self.tokens[name]:
-                return self.tokens[name][None], 0
-        return "", 1
+                return self.tokens[name][None], True
+        return "", False
 
     def observe_token_value(self, name, observed_value, original_value=None):
         """
@@ -44,6 +46,7 @@ class Tokens:
         self.tokens[name][original_value] = observed_value
 
 
+
 def log(msg):
     """
     Logging to STDERR as STDOUT and STDIN used for data transfer
@@ -57,17 +60,31 @@ def log(msg):
     sys.stderr.write(msg)
     sys.stderr.flush()
 
+def gor_hex_data(data):
+    if PY3:
+        data = b''.join(
+            map(lambda x: binascii.hexlify(x)
+                if isinstance(x, bytes) else binascii.hexlify(x.encode()),
+                [data.raw_meta, '\n', data.http])) + b'\n'
+        return data.decode('utf-8')
+    else:
+        return ''.join(map(lambda x: binascii.hexlify(x),
+                           [data.raw_meta, '\n', data.http])) + '\n'
+
 
 def on_request(proxy, msg, **kwargs):
     tokens = kwargs['tokens']
-    # TODO: modify token if necessary
+    # TODO: modify timestamp and move requests that can not be correlated back in the queue
     proxy.on('response', on_response, idx=msg.id, req=msg, tokens=tokens)
     log("Processing Request: {}".format(msg.id))
 
     # Modify the token
     request_cookie = proxy.http_cookie(msg.http, TOKEN_NAME)
     if request_cookie is not None:
-        updated_token, _ = tokens.get_token_value(TOKEN_NAME, request_cookie)
+        updated_token, token_found = tokens.get_token_value(TOKEN_NAME, request_cookie)
+        if not token_found:
+            log("Request contains Cookie {}={} but no updated value has been observed so far, putting it back in the queue".format(TOKEN_NAME,request_cookie))
+            proxy.renqueue(gor_hex_data(msg))
         log("Modifying {} Cookie from {} to {}".format(TOKEN_NAME, request_cookie, updated_token))
         new_msg = msg
         new_msg.http = proxy.set_http_cookie(msg.http, TOKEN_NAME, updated_token)
@@ -86,6 +103,7 @@ def on_replay(proxy, msg, **kwargs):
     request_cookie = proxy.http_cookie(kwargs['req'].http, TOKEN_NAME)
     original_response_cookie = proxy.http_cookie(kwargs['resp'].http, TOKEN_NAME, header_name='Set-Cookie')
     replayed_response_cookie = proxy.http_cookie(msg.http, TOKEN_NAME, header_name='Set-Cookie')
+    time.sleep(5)
     tokens.observe_token_value(TOKEN_NAME, replayed_response_cookie, original_response_cookie)
 
     # Debug
@@ -104,12 +122,14 @@ def on_replay(proxy, msg, **kwargs):
         log('replay status is same as response status\n')
     # log('Received Response {}'.format(msg.http))
 
-
 if __name__ == '__main__':
     toks = Tokens()
     proxy = TornadoGor()
     proxy.setup_prometheus(enable=True, port=8000)
-    log('Starting Proxy')
+    # Set the first handler (others are initialized as needed within this one)
     proxy.on('request', on_request, tokens=toks)
+
+    log('Starting Proxy')
     proxy.run()
+
 

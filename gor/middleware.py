@@ -21,6 +21,20 @@ def die_on_error():
         sys.exit(1)
 
 
+def log(msg):
+    """
+    Logging to STDERR as STDOUT and STDIN used for data transfer
+    @type msg: str or byte string
+    @param msg: Message to log to STDERR
+    """
+    try:
+        msg = str(msg) + '\n'
+    except:
+        pass
+    sys.stderr.write(msg)
+    sys.stderr.flush()
+
+
 class TornadoGor(Gor):
 
     def __init__(self, *args, **kwargs):
@@ -69,6 +83,10 @@ class TornadoGor(Gor):
             self.io_loop = ioloop.IOLoop.current()
             self.io_loop.run_sync(self._run)
             sys.exit(errno.EINTR)
+
+    def renqueue(self, line):
+        log("Putting back in the queue line {}".format(self.parse_message(line).id))
+        self.q.put(line)
 
     def setup_prometheus(self, enable=True, port=8000):
         self.enable_prom_exporter = enable

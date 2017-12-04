@@ -1,10 +1,11 @@
 # coding: utf-8
 
-import re
-import sys
 import binascii
 import datetime
+import re
+import sys
 import traceback
+
 PY3 = sys.version_info >= (3,)
 try:
     from urllib.parse import quote_plus, urlparse, parse_qs
@@ -193,12 +194,21 @@ class Gor(object):
         else:
             return payload[:payload.index('\r\n\r\n')+4] + new_body
 
-    def http_cookie(self, payload, name):
-        cookie_data = self.http_header(payload, 'Cookie')
+    def http_cookie(self, payload, name, header_name='Cookie'):
+        """
+        Retrieves the value of a cookie from te Set-Cookie header contained in the payload
+        :param payload: the http payload to inspect
+        :param name: the name of the cookie to look for
+        :param header_name: name name of the head where we should look for the cookie (Defaults to "Cookie")
+        :return: the value for the cookie or None
+        """
+        cookie_data = self.http_header(payload, header_name)
+        if cookie_data is None:
+            return None
         cookies = cookie_data.get('value') or ''
         for item in cookies.split('; '):
             if item.startswith(name + '='):
-                return item[item.index('=')+1:]
+                return item[item.index('=') + 1:]
         return None
 
     def set_http_cookie(self, payload, name, value):

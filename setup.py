@@ -17,7 +17,7 @@ __version__ = ""
 exec(open('gor/version.py').read())
 
 setup(
-    name='goreplay_py_middleware',
+    name='gor',
     version=__version__,
     description='Python library for GoReplay Middleware',
     long_description=long_description,

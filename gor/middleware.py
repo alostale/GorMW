@@ -1,16 +1,16 @@
 # coding: utf-8
 
-import sys
+import contextlib
 import errno
 import logging
+import sys
+
+from prometheus_client import start_http_server, Histogram
+from tornado import gen, ioloop, queues
+from tornado.stack_context import StackContext
 
 from .base import Gor
 
-from tornado import gen, ioloop, queues
-
-
-import contextlib
-from tornado.stack_context import StackContext
 
 @contextlib.contextmanager
 def die_on_error():
@@ -27,6 +27,11 @@ class TornadoGor(Gor):
         super(TornadoGor, self).__init__(*args, **kwargs)
         self.q = queues.Queue()
         self.concurrency = kwargs.get('concurrency', 2)
+
+        # Initialize Prometheus exporter as disabled
+        self.prometheus_counter = None
+        self.enable_prom_exporter = False
+        self.prometheus_port = 8000
 
     @gen.coroutine
     def _process(self):
@@ -59,6 +64,31 @@ class TornadoGor(Gor):
 
     def run(self):
         with StackContext(die_on_error):
+            if self.enable_prom_exporter:
+                self.on('replay', self.stats_add_replay, counters=self.prometheus_counter)
+                start_http_server(8000)
             self.io_loop = ioloop.IOLoop.current()
             self.io_loop.run_sync(self._run)
             sys.exit(errno.EINTR)
+
+    def setup_prometheus(self, enable=True, port=8000):
+        self.enable_prom_exporter = enable
+        self.prometheus_port = port
+        self.prometheus_counter = Counters()
+
+
+class Counters:
+    def __init__(self):
+        self.responses = {}
+
+    def add_response(self, latency, labels=None):
+        key = ""
+        for label_name in labels:
+            key += "_" + label_name
+
+        # If the counter is already there observe the sample
+        if key in self.responses:
+            self.responses[key].labels(**labels).observe(latency)
+        # Otherwise create the counter
+        else:
+            self.responses[key] = Histogram('responses_latency', 'Response Time of Replayed Responses', labels.keys())

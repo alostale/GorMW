@@ -6,7 +6,8 @@ import os
 from setuptools import setup
 
 requirements = [
-    'tornado >= 4.5.2'
+    'tornado >= 4.5.2',
+    'prometheus_client >= 0.0.21'
 ]
 
 f = open(os.path.join(os.path.dirname(__file__), 'README.rst'))

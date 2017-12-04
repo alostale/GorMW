@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
 
-from prometheus_client import start_http_server, Histogram
-
 from gor.middleware import TornadoGor
 
 """
@@ -10,23 +8,6 @@ Stores prometheus counters and provides an interface to push metrics with custom
 """
 
 TOKEN_NAME = 'JSESSIONID'
-
-
-class Counters:
-    def __init__(self):
-        self.responses = {}
-
-    def add_response(self, latency, labels=None):
-        key = ""
-        for label_name in labels:
-            key += "_" + label_name
-
-        # If the counter is already there observe the sample
-        if key in self.responses:
-            self.responses[key].labels(**labels).observe(latency)
-        # Otherwise create the counter
-        else:
-            self.responses[key] = Histogram('responses_latency', 'Response Time of Replayed Responses', labels.keys())
 
 
 class Tokens:
@@ -78,10 +59,9 @@ def log(msg):
 
 
 def on_request(proxy, msg, **kwargs):
-    stats = kwargs['stats']
     tokens = kwargs['tokens']
     # TODO: modify token if necessary
-    proxy.on('response', on_response, idx=msg.id, req=msg, stats=stats, tokens=tokens)
+    proxy.on('response', on_response, idx=msg.id, req=msg, tokens=tokens)
     log("Processing Request: {}".format(msg.id))
 
     # Modify the token
@@ -95,13 +75,11 @@ def on_request(proxy, msg, **kwargs):
 
 
 def on_response(proxy, msg, **kwargs):
-    stats = kwargs['stats']
     tokens = kwargs['tokens']
-    proxy.on('replay', on_replay, idx=kwargs['req'].id, req=kwargs['req'], resp=msg, stats=stats, tokens=tokens)
+    proxy.on('replay', on_replay, idx=kwargs['req'].id, req=kwargs['req'], resp=msg, tokens=tokens)
 
 
 def on_replay(proxy, msg, **kwargs):
-    stats = kwargs['stats']
     tokens = kwargs['tokens']
 
     # Look for tokens to be saved in the Set-Cookie of the response
@@ -126,21 +104,11 @@ def on_replay(proxy, msg, **kwargs):
         log('replay status is same as response status\n')
     # log('Received Response {}'.format(msg.http))
 
-    # Update exporter counters
-    http_path = proxy.http_path(kwargs['req'].http)
-    http_base_path = http_path[:http_path.find('/', 1)]
-    labels = {'http_status': replay_status,
-              'http_method': proxy.http_method(kwargs['req'].http),
-              'http_path': http_base_path
-              }
-    stats.add_response(float(msg.meta[3]) / 1000000, labels)
-
 
 if __name__ == '__main__':
-    exporters = Counters()
     toks = Tokens()
-    start_http_server(8000)
     proxy = TornadoGor()
+    proxy.setup_prometheus(enable=True, port=8000)
     log('Starting Proxy')
-    proxy.on('request', on_request, stats=exporters, tokens=toks)
+    proxy.on('request', on_request, tokens=toks)
     proxy.run()

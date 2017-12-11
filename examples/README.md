@@ -24,10 +24,10 @@ The main problem we are facing is the Open Loop asynchronous nature of GoReplay 
 In such a case the following sequence of events might occur. 
 
 The recorded sequence of events looks like: 
-![Record](https://github.com/GiovanniPaoloGibilisco/goreplay-python-middleware/raw/master/docs/record.png)
+![Record](https://github.com/GiovanniPaoloGibilisco/GorMW/blob/master/docs/record.png)
 
 While the replay looks like:
-![Record](https://github.com/GiovanniPaoloGibilisco/goreplay-python-middleware/raw/master/docs/replay.png)
+![Record](https://github.com/GiovanniPaoloGibilisco/GorMW/blob/master/docs/replay.png)
 
 In this case the server is not quick enough to send the response to the first request (the one that allows the creation of the JSESSIONID) so the second request is still using the same JSESSIONID used in the recording which is not valid for the target system
 

@@ -82,12 +82,12 @@ def on_request(proxy, msg, **kwargs):
     request_cookie = proxy.http_cookie(msg.http, TOKEN_NAME)
     if request_cookie is not None:
         updated_token, token_found = tokens.get_token_value(TOKEN_NAME, request_cookie)
-        if not token_found:
-            log("Request contains Cookie {}={} but no updated value has been observed so far, putting it back in the queue".format(TOKEN_NAME,request_cookie))
-            proxy.renqueue(gor_hex_data(msg))
-        log("Modifying {} Cookie from {} to {}".format(TOKEN_NAME, request_cookie, updated_token))
         new_msg = msg
-        new_msg.http = proxy.set_http_cookie(msg.http, TOKEN_NAME, updated_token)
+        if not token_found:
+            log("Request contains Cookie {}={} - not updating it".format(TOKEN_NAME,request_cookie))
+        else:
+            log("Modifying {} Cookie from {} to {}".format(TOKEN_NAME, request_cookie, updated_token))
+            new_msg.http = proxy.set_http_cookie(msg.http, TOKEN_NAME, updated_token)
         return new_msg
 
 
